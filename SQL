@@ -1,0 +1,199 @@
+
+-- Part 1 
+-- 1. Show list of transactions occurring in February 2018 with SHIPPED status
+SELECT *
+FROM `SQL Test-Analyst 2022`.sql_test 
+WHERE status = 'SHIPPED' AND SUBSTRING(transaction_date,1,7) = '2018-02'
+
+-- 2. Show list of transactions occuring from midnight to 9AM
+SELECT * 
+FROM `SQL Test-Analyst 2022`.sql_test 
+WHERE TIME(transaction_date) BETWEEN '00:00:00' AND '09:00:00'
+
+-- 3. Show a list of only the last transactions from each vendor
+SELECT MAX(transaction_date), vendor
+FROM `SQL Test-Analyst 2022`.sql_test 
+GROUP BY vendor
+
+ -- 4. Show a list of only the second last transactions from each vendor
+-- window function is evaluated after where clause 
+WITH CTE AS(
+SELECT s.*, DENSE_RANK() OVER (PARTITION BY vendor ORDER BY transaction_date DESC) AS rank
+FROM `SQL Test-Analyst 2022`.sql_test s
+)
+SELECT * 
+FROM CTE 
+INNER JOIN `SQL Test-Analyst 2022`.sql_test s
+ON CTE.Id = s.Id
+WHERE rank = 2
+
+-- 5. Count the transactions from each vendor with the status CANCELLED per day
+SELECT COUNT(*) AS number_trans, vendor
+FROM `SQL Test-Analyst 2022`.sql_test s
+WHERE status = 'CANCELLED'
+GROUP BY vendor
+
+-- 6. Show a list of customers who made more than 1 SHIPPED purchases
+
+SELECT customer_id
+FROM `SQL Test-Analyst 2022`.sql_test s
+WHERE status = 'SHIPPED' 
+GROUP BY customer_id
+HAVING COUNT(*)>1
+
+
+-- 7. Show the total transactions(volume) and category of each vendor by following these criteria:
+-- a. Superb: more than 2 SHIPPED and 0 CANCELLED transactions
+-- b. Good: more than 2 SHIPPED and 1 or more CANCELLED transactions
+-- c. Normal: other than Superb and Good criteria
+-- Order the vendors by the best category (Superb, Good, Normal), then by the biggest transaction volume
+
+
+
+SELECT vendor,
+	CASE 
+		WHEN SUM(CASE WHEN status = 'SHIPPED' THEN 1 ELSE 0 END) > 2 
+			  AND SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) = 0 THEN 'Superb'
+		 
+		WHEN SUM(CASE WHEN status = 'SHIPPED' THEN 1 ELSE 0 END) > 2
+			  AND SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) >=1 THEN 'Good'
+	     ELSE 'Normal'
+	END AS category,
+		COUNT(*) AS total_trans
+FROM `SQL Test-Analyst 2022`.sql_test s
+GROUP BY vendor
+ORDER BY category DESC, total_trans;
+
+
+-- 8. Group the transaction by hour of transaction_date
+
+SELECT DATE_FORMAT(`transaction_date`, '%H') as hour_of_the_day, COUNT(*) as total_trans
+FROM `SQL Test-Analyst 2022`.sql_test s
+GROUP BY hour_of_the_day;
+
+-- 9. Group the transactions by day and statuses as the example below:
+
+SELECT DATE(transaction_date) as date, 
+	SUM(CASE WHEN status = 'SHIPPED' THEN 1 ELSE 0 END) AS shipped,
+	SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled,
+	SUM(CASE WHEN status = 'PROCESSING' THEN 1 ELSE 0 END) AS processing
+FROM `SQL Test-Analyst 2022`.sql_test s
+GROUP BY date
+ORDER BY date;
+
+
+-- 10. Calculate the average, minimum and maximum of days interval of each transaction (how many days from one transaction to the next)
+  
+WITH CTE AS (
+SELECT DATEDIFF(transaction_date, LAG(transaction_date) OVER (ORDER BY transaction_date)) AS interval_days
+FROM `SQL Test-Analyst 2022`.sql_test s)
+
+SELECT MIN(interval_days) as minimum_days,
+	   MAX(interval_days) as maximum_days,
+	   AVG(interval_days) as average_days
+FROM CTE
+
+
+-- Part 2:
+-- 1. Show the sum of total value of products shipped along with the distributor commissions (2% of the total product value if total quantity is 100 or less,
+-- 4% of the total product value if  total quantity sold is more than 100)
+
+SELECT product_name, SUM(quantity * price) AS value,
+	SUM(CASE WHEN quantity <=100 THEN 0.02 * quantity * price 
+		 ELSE 0.04 * quantity * price 
+		 END) AS distributor_commission
+
+FROM `transaction_details`.trans
+
+WHERE Id IN 
+
+	(SELECT Id 
+	FROM `SQL Test-Analyst 2022`.sql_test s
+	WHERE status='SHIPPED')
+GROUP BY product_name
+
+
+-- 2. Show total quantity of Indomie (all variant) shipped within Feb 2018
+SELECT SUM(quantity) as total_quantity
+FROM `transaction_details`.trans
+WHERE trx_id IN 
+	(SELECT Id 
+	 FROM `SQL Test-Analyst 2022`.sql_test s
+	 WHERE SUBSTRING(transaction_date, 1,7) = '2018-02'  
+	)
+	AND product_name like '%Indomie%'
+
+
+-- 3. For each product, show the ID of the last transaction which contained that particular product 
+	
+SELECT  product_name,  MAX(trx_id) as last_trans_id
+FROM `transaction_details`.trans t 
+GROUP BY product_name
+
+
+
+-- Techcombank Future Gen Tech 2023 Technical test 
+
+-- Question 1:
+SELECT FIRST_NAME, GENDER, DEPARTMENT_ID
+FROM `Employees` e 
+INNER JOIN `Department` d
+ON e.DEPARTMENT_ID = d.DEPARTMENT_ID
+ORDER BY DEPARTMENT_ID 
+
+
+
+-- Question 2:
+SELECT EMPLOYEE_ID, CONCAT(FIRST_NAME,' ', LAST_NAME) as FULL_NAME
+FROM `Employees` e
+WHERE EMPLOYEE_ID > 1 AND MOD(EMPLOYEE_ID, EMPLOYEE_ID) == 0 AND MOD(EMPLOYEE_ID, 1) == 0
+ORDER BY Employee_ID 
+LIMIT 10;
+
+-- Question 3:
+SELECT DEPARTMENT_NAME, 
+FROM `Department` 
+WHERE (DEPARTMENT_NAME LIKE '%a%' OR DEPARTMENT_NAME LIKE '%r%') AND 
+	(DEPARTMENT_NAME NOT LIKE '%a%r%' OR DEPARTMENT_NAME NOT LIKE '%r%a%')
+ORDER BY DEPARTMENT_NAME DESC
+
+-- Question 4: 
+
+WITH work_days AS (
+SELECT dept_no, DATEDIFF(day,from_date,to_date) as working_days
+FROM dept_emp),
+
+dept_days AS (
+SELECT SUM(working_days) as strength, dept_no
+FROM work_days
+GROUP BY dept_no)
+
+SELECT d2.dept_name, d1.strength,
+	CASE WHEN d1.strength < 20000 THEN 'L'
+		 WHEN d1.strength BETWEEN 20000 AND 50000 THEN 'M'
+		 ELSE 'H' END AS strength_symbol
+FROM `dept_days` d1
+LEFT JOIN `department`
+ON d1.dept_no = d2.dept_no
+
+-- Question 5: 
+
+-- Calculate employee's turnover rate within 2 months of probation and show top 5 department that has the most turnover rate 
+WITH emp_month AS (
+SELECT COUNT(emp_no) AS total_emp, dept_no
+FROM `dept_emp`
+WHERE DATEDIFF(month, from_date, to_date) <=2 
+GROUP BY dept_no
+) ,
+
+turnover AS (
+SELECT d.dept_no, e.total_emp/count(d.emp_no) * 100 as turnover_rate 
+FROM `dept_emp` d 
+LEFT JOIN `emp_month` e 
+GROUP BY d.dept_no)
+
+SELECT d.department_name, turnover_rate 
+FROM `departments` d 
+LEFT JOIN `turnover` t 
+ON d.dept_no = t.dept_no
+LIMIT 5; 
